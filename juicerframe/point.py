@@ -55,8 +55,22 @@ _unflatten = {
 }
 class PointList(list):
     
-    def __init__(self, points):
-        super().__init__(points)
+    def __init__(self, obj):
+        cls = type(self)
+        sup = super(PointList, cls)
+        
+        t = type(obj)
+        if t is cls:
+            sup.__init__(self, obj)
+            return
+        if not t in _flatten:
+            if not t is Point:
+                obj = Point({}, (obj,))
+            sup.__init__(self, [obj])
+            return
+        prepared = [cls(component) for component in _flatten[t](obj)]
+        prod = cls.product(*prepared)
+        sup.__init__(self, prod.map(_unflatten[t]).map(lambda x : (x,)))
     
     def distribute(self, axis):
         l = PointList([])
@@ -70,9 +84,9 @@ class PointList(list):
         for p in self:
             yield p.values
     
-    @staticmethod
-    def product(*pointlists):
-        newpoints = []
+    @classmethod
+    def product(cls, *pointlists):
+        newpoints = cls.__new__(cls)
         for ps in product(*pointlists):
             for p in ps:
                 if not issubclass(type(p), Point):
@@ -81,26 +95,19 @@ class PointList(list):
                 newpoints.append(Point.sum(*ps))
             except IncompatibleException as e:
                 continue
-        return PointList(newpoints)
-    
-    @staticmethod
-    def vary(iterable_like, axis):
-        return PointList.make(list(iterable_like)).map(lambda x: x[0]).distribute(axis)
-
-    @staticmethod
-    def make(obj):
-        t = type(obj)
-        if t is PointList:
-            return obj
-        if not t in _flatten:
-            return PointList([Point({}, (obj,))])
-        prepared = [PointList.make(component) for component in _flatten[t](obj)]
-        prod = PointList.product(*prepared)
-        return prod.map(_unflatten[t]).map(lambda x : (x,))
         
+        return newpoints
+    
+    @classmethod
+    def vary(cls, iterable_like, axis):
+        return cls.make(iterable_like).map(lambda x: x[0]).distribute(axis)
         
     def map(self, func):
-        return PointList([p.map(func) for p in self])
+        cls = type(self)
+        newpoints = cls.__new__(cls)
+        for point in self:
+            newpoints.append(point.map(func))
+        return newpoints
     
     def __eq__(self, other):
         if len(self) != len(other):

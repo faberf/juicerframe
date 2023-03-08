@@ -107,4 +107,4 @@ class TestPoint(unittest.TestCase):
             Point({"b":4}, ([1, 2, 3, 'hi4'],)),
         ])
         
-        self.assertEqual(PointList.make(l), should)
+        self.assertEqual(PointList(l), should)
