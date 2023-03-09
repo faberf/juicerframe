@@ -101,6 +101,14 @@ class PointList(list):
     @classmethod
     def vary(cls, iterable_like, axis):
         return cls.make(iterable_like).map(lambda x: x[0]).distribute(axis)
+
+    @classmethod
+    def pointwise(cls, func):
+        def inner(*args, **kwargs):
+            pl = cls([args, kwargs])
+            return pl.map(lambda x, y: func(*x, **y))
+    
+        return inner
         
     def map(self, func):
         cls = type(self)
@@ -116,3 +124,5 @@ class PointList(list):
             if p1 != p2:
                 return False
         return True
+
+

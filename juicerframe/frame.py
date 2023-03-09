@@ -1,5 +1,6 @@
 
 
+import abc
 import juicerframe.point
 import time
 
@@ -17,20 +18,25 @@ class Pointer:
 class SkipException(Exception):
     pass
 
-class Cursor:
+class AbstractCursor(abc.ABC):
     
-    def __init__(self, skip, key_path):
-        self.skip = skip
+    @abc.abstractmethod
+    def retrieve(self, data):
+        pass
+
+class SelectCursor(AbstractCursor):
+    
+    def __init__(self, key_path):
         self.key_path = key_path
     
     def retrieve(self, data):
-        if self.skip:
-            raise SkipException
         for key in self.key_path:
             data = data[key]
         return data
 
-
+class SkipCursor(AbstractCursor):
+    def retrieve(self, data):
+        raise SkipException
 
 class DerivedPointList(juicerframe.point.PointList):
     
@@ -48,11 +54,54 @@ class Frame:
     
     def __init__(self, obj= {}):
         self.plist = Pointer(DerivedPointList(obj))
-        self.cursors = DerivedPointList(Cursor(skip = False, key_path=[]))
+        self.cursors = DerivedPointList(SelectCursor(key_path=[]))
+    
+    def vary(self):
+        return Frame(DerivedPointList.vary(DerivedPointList(self)))
+        
     
     def where(self, mask):
-        pass
+        f = Frame.__new__(Frame)
+        
+        @DerivedPointList.pointwise
+        def create_cursor(cursor, m):
+            if not m:
+                return SkipCursor()
+            return cursor
+        
+        f.plist = self.plist
+        f.cursors = create_cursor(self.cursors, mask)
+        return f
     
+    def configure(self, *dict_list, **kwargs):
+        
+        @DerivedPointList.pointwise
+        def update_data(data, _dict_list, _kwargs):
+            updated = {**data}
+            for d in _dict_list + [_kwargs]:
+                for k, v in d.items:
+                    updated[k] = v
+            return updated
+        
+        self.plist.set(update_data(self.plist.get(), dict_list, kwargs))
+        return self
+    
+    def select(self, key):
+        f = Frame.__new__(Frame)
+        
+        @DerivedPointList.pointwise
+        def create_cursor(cursor, k):
+            return SelectCursor(cursor.key_path +  [k])
+        
+        f.plist = self.plist
+        f.cursors = create_cursor(self.cursors, key)
+        return f
+
+    def __getitem__(self, key):
+        return self.select(key)
+    
+    def __setitem__(self, key, value):
+        return self.configure({key:value})
         
     def __iter__(self):
         for point in DerivedPointList.product(self.plist.get(),self.cursors):
